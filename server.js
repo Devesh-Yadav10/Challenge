@@ -15,7 +15,7 @@ async function callClaude(systemPrompt, userPrompt) {
   const body = JSON.stringify({
     system_instruction: { parts: [{ text: systemPrompt }] },
     contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-    generationConfig: { maxOutputTokens: 1000, temperature: 0.3 },
+    generationConfig: { maxOutputTokens: 1000, temperature: 0 },
   });
 
   return new Promise((resolve, reject) => {
