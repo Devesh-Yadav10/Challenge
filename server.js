@@ -122,7 +122,7 @@ async function router(req, res) {
   // Metadata
   if (method === 'GET' && url === '/v1/metadata') {
     return send(res, 200, {
-      team: 'Claude Vera Agent',
+      team_name: 'Claude Vera Agent',
       model: 'gemini-2.0-flash',
       version: '1.0.0',
       description: 'AI-powered merchant messaging agent using Gemini 2.0 Flash',
