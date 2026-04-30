@@ -1,0 +1,10 @@
+# render.yaml — drop this in the repo root and connect to render.com
+services:
+  - type: web
+    name: vera-merchant-agent
+    env: node
+    buildCommand: ""
+    startCommand: node server.js
+    envVars:
+      - key: PORT
+        value: 3000

@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Student Management System</title>
+<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@400;500&display=swap" rel="stylesheet" />
+<style>
+  /* ── Reset & Tokens ─────────────────────────────────────────── */
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg:        #0b0f1a;
+    --surface:   #111827;
+    --card:      #1a2235;
+    --border:    #243049;
+    --accent:    #38bdf8;
+    --accent2:   #818cf8;
+    --danger:    #f87171;
+    --success:   #34d399;
+    --text:      #e2e8f0;
+    --muted:     #64748b;
+    --font-head: 'Syne', sans-serif;
+    --font-mono: 'DM Mono', monospace;
+    --radius:    10px;
+    --shadow:    0 4px 24px rgba(0,0,0,.45);
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 14px;
+    min-height: 100vh;
+  }
+
+  /* ── Layout ─────────────────────────────────────────────────── */
+  .shell {
+    display: grid;
+    grid-template-columns: 340px 1fr;
+    min-height: 100vh;
+  }
+
+  /* ── Sidebar ─────────────────────────────────────────────────── */
+  .sidebar {
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    padding: 32px 28px;
+    display: flex;
+    flex-direction: column;
+    gap: 28px;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+  }
+
+  .logo {
+    font-family: var(--font-head);
+    font-weight: 800;
+    font-size: 22px;
+    letter-spacing: -.5px;
+    color: var(--accent);
+    line-height: 1.2;
+  }
+  .logo span { color: var(--accent2); }
+
+  /* Form */
+  .form-section h2 {
+    font-family: var(--font-head);
+    font-size: 13px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: var(--muted);
+    margin-bottom: 16px;
+  }
+
+  .form-grid {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+  }
+
+  .field label {
+    display: block;
+    font-size: 11px;
+    font-weight: 500;
+    color: var(--muted);
+    margin-bottom: 5px;
+    text-transform: uppercase;
+    letter-spacing: 1px;
+  }
+  .field label .req { color: var(--danger); margin-left: 2px; }
+
+  .field input,
+  .field select,
+  .field textarea {
+    width: 100%;
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 9px 12px;
+    border-radius: var(--radius);
+    outline: none;
+    transition: border-color .18s, box-shadow .18s;
+  }
+  .field input:focus,
+  .field select:focus,
+  .field textarea:focus {
+    border-color: var(--accent);
+    box-shadow: 0 0 0 3px rgba(56,189,248,.12);
+  }
+  .field textarea { resize: vertical; min-height: 64px; }
+  .field select option { background: var(--surface); }
+
+  .hint {
+    display: block;
+    font-size: 10px;
+    color: var(--muted);
+    margin-top: 4px;
+    letter-spacing: .4px;
+  }
+  .field input:invalid:not(:placeholder-shown) {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 3px rgba(248,113,113,.12);
+  }
+  .field input:valid:not(:placeholder-shown) {
+    border-color: var(--success);
+    box-shadow: 0 0 0 3px rgba(52,211,153,.10);
+  }
+  .field input:invalid:not(:placeholder-shown) ~ .hint { color: var(--danger); }
+  .field input:valid:not(:placeholder-shown)   ~ .hint { color: var(--success); }
+
+  .row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+
+  /* Buttons */
+  .btn-row {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    margin-top: 4px;
+  }
+  .btn {
+    padding: 10px 14px;
+    border-radius: var(--radius);
+    border: none;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 500;
+    cursor: pointer;
+    transition: opacity .15s, transform .12s;
+    letter-spacing: .5px;
+  }
+  .btn:active { transform: scale(.97); }
+  .btn-primary { background: var(--accent); color: #0b0f1a; }
+  .btn-outline  { background: transparent; border: 1px solid var(--border); color: var(--text); }
+  .btn-danger   { background: var(--danger); color: #fff; grid-column: span 2; }
+  .btn:disabled { opacity: .4; cursor: not-allowed; }
+
+  /* Toast */
+  #toast {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    background: var(--card);
+    border: 1px solid var(--border);
+    color: var(--text);
+    padding: 12px 20px;
+    border-radius: var(--radius);
+    font-size: 13px;
+    box-shadow: var(--shadow);
+    opacity: 0;
+    transform: translateY(10px);
+    transition: opacity .25s, transform .25s;
+    z-index: 999;
+    max-width: 320px;
+  }
+  #toast.show { opacity: 1; transform: translateY(0); }
+  #toast.success { border-left: 3px solid var(--success); }
+  #toast.error   { border-left: 3px solid var(--danger); }
+
+  /* ── Main content ────────────────────────────────────────────── */
+  .main {
+    padding: 32px 36px;
+    overflow-x: auto;
+  }
+
+  .main-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 28px;
+    gap: 16px;
+    flex-wrap: wrap;
+  }
+
+  .main-header h1 {
+    font-family: var(--font-head);
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -1px;
+  }
+
+  .search-wrap {
+    position: relative;
+  }
+  .search-wrap input {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    padding: 9px 12px 9px 36px;
+    border-radius: var(--radius);
+    outline: none;
+    width: 240px;
+    transition: border-color .18s;
+  }
+  .search-wrap input:focus { border-color: var(--accent); }
+  .search-wrap svg {
+    position: absolute;
+    left: 10px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--muted);
+  }
+
+  /* Stats bar */
+  .stats { display: flex; gap: 16px; margin-bottom: 24px; flex-wrap: wrap; }
+  .stat-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 14px 20px;
+    min-width: 140px;
+    flex: 1;
+  }
+  .stat-card .label { font-size: 10px; text-transform: uppercase; letter-spacing: 1.5px; color: var(--muted); margin-bottom: 6px; }
+  .stat-card .value { font-family: var(--font-head); font-size: 28px; font-weight: 800; }
+  .stat-card.a .value { color: var(--accent); }
+  .stat-card.b .value { color: var(--accent2); }
+  .stat-card.c .value { color: var(--success); }
+
+  /* Table */
+  .table-wrap {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    overflow: hidden;
+  }
+
+  table { width: 100%; border-collapse: collapse; }
+
+  thead { background: var(--card); }
+  thead th {
+    text-align: left;
+    padding: 13px 16px;
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 1.5px;
+    color: var(--muted);
+    font-weight: 500;
+    white-space: nowrap;
+  }
+
+  tbody tr {
+    border-top: 1px solid var(--border);
+    transition: background .12s;
+    cursor: pointer;
+  }
+  tbody tr:hover { background: rgba(56,189,248,.05); }
+  tbody tr.selected { background: rgba(56,189,248,.10); }
+
+  td {
+    padding: 12px 16px;
+    font-size: 13px;
+    white-space: nowrap;
+    max-width: 180px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .badge {
+    display: inline-block;
+    padding: 2px 10px;
+    border-radius: 99px;
+    font-size: 11px;
+    font-weight: 500;
+  }
+  .badge-m { background: rgba(56,189,248,.12); color: var(--accent); }
+  .badge-f { background: rgba(129,140,248,.12); color: var(--accent2); }
+  .badge-o { background: rgba(52,211,153,.12); color: var(--success); }
+
+  .year-dot {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    background: var(--card);
+    border: 1px solid var(--border);
+    font-size: 11px;
+    font-weight: 600;
+    font-family: var(--font-head);
+  }
+
+  .empty {
+    text-align: center;
+    padding: 60px 20px;
+    color: var(--muted);
+    font-size: 13px;
+  }
+  .empty svg { display: block; margin: 0 auto 14px; opacity: .3; }
+
+  /* ── Responsive ──────────────────────────────────────────────── */
+  @media (max-width: 900px) {
+    .shell { grid-template-columns: 1fr; }
+    .sidebar { position: static; height: auto; }
+    .main { padding: 20px; }
+  }
+</style>
+</head>
+<body>
+
+<div class="shell">
+
+  <!-- ══════════════ SIDEBAR FORM ══════════════ -->
+  <aside class="sidebar">
+    <div class="logo">Student<br/><span>Mgmt</span> System</div>
+
+    <div class="form-section">
+      <h2 id="formTitle">Add Student</h2>
+      <form id="studentForm" class="form-grid" onsubmit="handleSubmit(event)">
+        <input type="hidden" id="editId" />
+
+        <div class="field">
+          <label>Full Name <span class="req">*</span></label>
+          <input id="f_name" type="text" placeholder="e.g. Aarav Sharma" required />
+        </div>
+
+        <div class="field">
+          <label>Roll No. <span class="req">*</span></label>
+          <input id="f_roll" type="text"
+            placeholder="24/CSE/001"
+            pattern="^\d{2}\/[A-Za-z]+\/\d+$"
+            title="Format: YY/BRANCH/SERIALNO — e.g. 24/CSE/001"
+            required />
+          <span class="hint">Format: 24/CSE/001</span>
+        </div>
+
+        <div class="field">
+          <label>Year <span class="req">*</span></label>
+          <select id="f_year" required>
+            <option value="">—</option>
+            <option>1</option><option>2</option><option>3</option>
+            <option>4</option><option>5</option><option>6</option>
+          </select>
+        </div>
+
+        <div class="field">
+          <label>Course <span class="req">*</span></label>
+          <input id="f_course" type="text" placeholder="B.Tech Computer Science" required />
+        </div>
+
+        <div class="field">
+          <label>Email <span class="req">*</span></label>
+          <input id="f_email" type="email"
+            placeholder="yourname@gmail.com"
+            pattern="^[a-zA-Z0-9._%+\-]+@gmail\.com$"
+            title="Must be a valid @gmail.com address"
+            required />
+          <span class="hint">Only @gmail.com accepted</span>
+        </div>
+
+        <div class="field">
+          <label>Phone <span class="req">*</span></label>
+          <input id="f_phone" type="tel"
+            placeholder="+91 9810000001"
+            pattern="^\+91\s[6-9]\d{9}$"
+            title="Format: +91 followed by a space and 10-digit number starting with 6-9"
+            maxlength="14"
+            required />
+          <span class="hint">Format: +91 9XXXXXXXXX</span>
+        </div>
+
+        <div class="row2">
+          <div class="field">
+            <label>Date of Birth <span class="req">*</span></label>
+            <input id="f_dob" type="date" required />
+          </div>
+          <div class="field">
+            <label>Gender <span class="req">*</span></label>
+            <select id="f_gender" required>
+              <option value="">—</option>
+              <option>Male</option>
+              <option>Female</option>
+              <option>Other</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="field">
+          <label>Address</label>
+          <textarea id="f_address" placeholder="Optional"></textarea>
+        </div>
+
+        <div class="btn-row">
+          <button type="submit" class="btn btn-primary" id="submitBtn">Add Student</button>
+          <button type="button" class="btn btn-outline" onclick="clearForm()">Clear</button>
+          <button type="button" class="btn btn-danger" id="deleteBtn" onclick="deleteStudent()" style="display:none">Delete Student</button>
+        </div>
+      </form>
+    </div>
+  </aside>
+
+  <!-- ══════════════ MAIN TABLE ══════════════ -->
+  <main class="main">
+    <div class="main-header">
+      <h1>All Students</h1>
+      <div class="search-wrap">
+        <svg width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24">
+          <circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/>
+        </svg>
+        <input type="text" id="searchInput" placeholder="Search by name or roll…" oninput="renderTable()" />
+      </div>
+    </div>
+
+    <!-- Stats -->
+    <div class="stats">
+      <div class="stat-card a"><div class="label">Total</div><div class="value" id="s_total">0</div></div>
+      <div class="stat-card b"><div class="label">Courses</div><div class="value" id="s_courses">0</div></div>
+      <div class="stat-card c"><div class="label">Latest</div><div class="value" id="s_latest">—</div></div>
+    </div>
+
+    <!-- Table -->
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr>
+            <th>#</th>
+            <th>Name</th>
+            <th>Roll No.</th>
+            <th>Course</th>
+            <th>Yr</th>
+            <th>Email</th>
+            <th>Phone</th>
+            <th>Gender</th>
+          </tr>
+        </thead>
+        <tbody id="tableBody"></tbody>
+      </table>
+    </div>
+  </main>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── Config ──────────────────────────────────────────────────────────────────
+const API = 'http://localhost:3000';   // ← your server URL
+
+let allStudents = [];
+let selectedId  = null;
+
+// ── Bootstrap ────────────────────────────────────────────────────────────────
+window.addEventListener('DOMContentLoaded', fetchStudents);
+
+// ── API helpers ──────────────────────────────────────────────────────────────
+async function fetchStudents() {
+  try {
+    const r = await fetch(`${API}/students`);
+    const j = await r.json();
+    allStudents = j.success ? j.data : [];
+  } catch {
+    allStudents = [];
+    toast('Cannot reach server — is it running?', 'error');
+  }
+  renderTable();
+  renderStats();
+}
+
+// ── Stats ────────────────────────────────────────────────────────────────────
+function renderStats() {
+  document.getElementById('s_total').textContent   = allStudents.length;
+  const courses = new Set(allStudents.map(s => s.course));
+  document.getElementById('s_courses').textContent = courses.size;
+  if (allStudents.length) {
+    const latest = allStudents[0].name.split(' ')[0];
+    document.getElementById('s_latest').textContent = latest;
+  }
+}
+
+// ── Table ────────────────────────────────────────────────────────────────────
+function renderTable() {
+  const q    = document.getElementById('searchInput').value.toLowerCase();
+  const list = q
+    ? allStudents.filter(s =>
+        s.name.toLowerCase().includes(q) ||
+        s.roll_number.toLowerCase().includes(q) ||
+        s.email.toLowerCase().includes(q))
+    : allStudents;
+
+  const tbody = document.getElementById('tableBody');
+
+  if (!list.length) {
+    tbody.innerHTML = `<tr><td colspan="8">
+      <div class="empty">
+        <svg width="40" height="40" fill="none" stroke="currentColor" stroke-width="1.5" viewBox="0 0 24 24">
+          <path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/>
+          <circle cx="9" cy="7" r="4"/>
+          <line x1="23" y1="11" x2="17" y2="11"/>
+        </svg>
+        No students found
+      </div>
+    </td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = list.map((s, i) => `
+    <tr onclick="selectRow(${s.id})" class="${selectedId === s.id ? 'selected' : ''}">
+      <td style="color:var(--muted);font-size:11px">${i + 1}</td>
+      <td style="font-weight:600;font-family:var(--font-head)">${esc(s.name)}</td>
+      <td style="color:var(--accent)">${esc(s.roll_number)}</td>
+      <td style="max-width:160px;overflow:hidden;text-overflow:ellipsis">${esc(s.course)}</td>
+      <td><span class="year-dot">${s.year}</span></td>
+      <td style="color:var(--muted)">${esc(s.email)}</td>
+      <td>${esc(s.phone)}</td>
+      <td><span class="badge badge-${s.gender === 'Male' ? 'm' : s.gender === 'Female' ? 'f' : 'o'}">${s.gender}</span></td>
+    </tr>
+  `).join('');
+}
+
+// ── Select row → populate form ────────────────────────────────────────────────
+function selectRow(id) {
+  const s = allStudents.find(x => x.id === id);
+  if (!s) return;
+  selectedId = id;
+
+  document.getElementById('editId').value   = s.id;
+  document.getElementById('f_name').value   = s.name;
+  document.getElementById('f_roll').value   = s.roll_number;
+  document.getElementById('f_year').value   = s.year;
+  document.getElementById('f_course').value = s.course;
+  document.getElementById('f_email').value  = s.email;
+  document.getElementById('f_phone').value  = s.phone;
+  document.getElementById('f_dob').value    = s.dob ? s.dob.split('T')[0] : '';
+  document.getElementById('f_gender').value = s.gender;
+  document.getElementById('f_address').value= s.address || '';
+
+  document.getElementById('formTitle').textContent    = 'Edit Student';
+  document.getElementById('submitBtn').textContent    = 'Update';
+  document.getElementById('deleteBtn').style.display  = 'block';
+
+  renderTable();   // re-render to highlight
+}
+
+// ── Submit (add or update) ────────────────────────────────────────────────────
+async function handleSubmit(e) {
+  e.preventDefault();
+
+  const body = {
+    name:        document.getElementById('f_name').value.trim(),
+    roll_number: document.getElementById('f_roll').value.trim(),
+    year:        parseInt(document.getElementById('f_year').value),
+    course:      document.getElementById('f_course').value.trim(),
+    email:       document.getElementById('f_email').value.trim(),
+    phone:       document.getElementById('f_phone').value.trim(),
+    dob:         document.getElementById('f_dob').value,
+    gender:      document.getElementById('f_gender').value,
+    address:     document.getElementById('f_address').value.trim(),
+  };
+
+  const editId = document.getElementById('editId').value;
+  const isEdit = !!editId;
+
+  try {
+    const r = await fetch(`${API}/students${isEdit ? '/' + editId : ''}`, {
+      method: isEdit ? 'PUT' : 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    });
+    const j = await r.json();
+    if (!j.success) return toast(j.message, 'error');
+    toast(j.data.message, 'success');
+    clearForm();
+    await fetchStudents();
+  } catch (err) {
+    toast('Server error: ' + err.message, 'error');
+  }
+}
+
+// ── Delete ────────────────────────────────────────────────────────────────────
+async function deleteStudent() {
+  const id = document.getElementById('editId').value;
+  if (!id || !confirm('Delete this student?')) return;
+  try {
+    const r = await fetch(`${API}/students/${id}`, { method: 'DELETE' });
+    const j = await r.json();
+    if (!j.success) return toast(j.message, 'error');
+    toast(j.data.message, 'success');
+    clearForm();
+    await fetchStudents();
+  } catch (err) {
+    toast('Server error: ' + err.message, 'error');
+  }
+}
+
+// ── Clear form ────────────────────────────────────────────────────────────────
+function clearForm() {
+  document.getElementById('studentForm').reset();
+  document.getElementById('editId').value                = '';
+  document.getElementById('formTitle').textContent       = 'Add Student';
+  document.getElementById('submitBtn').textContent       = 'Add Student';
+  document.getElementById('deleteBtn').style.display     = 'none';
+  selectedId = null;
+  renderTable();
+}
+
+// ── Toast ─────────────────────────────────────────────────────────────────────
+function toast(msg, type = 'success') {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.className   = `show ${type}`;
+  clearTimeout(el._t);
+  el._t = setTimeout(() => el.className = '', 3000);
+}
+
+// ── Escape HTML ───────────────────────────────────────────────────────────────
+function esc(s) {
+  return String(s ?? '').replace(/[&<>"']/g, c =>
+    ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' }[c])
+  );
+}
+</script>
+</body>
+</html>

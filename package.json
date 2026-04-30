@@ -1,0 +1,13 @@
+{
+  "name": "vera-merchant-agent",
+  "version": "1.0.0",
+  "description": "magicpin AI merchant messaging agent powered by Claude",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js",
+    "test": "node test_local.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
