@@ -7,24 +7,25 @@ const store = {
   replies: new Map(),
 };
 
-// ─── Anthropic API call ───────────────────────────────────────────────────────
+// ─── Gemini API call ──────────────────────────────────────────────────────────
 async function callClaude(systemPrompt, userPrompt) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error('GEMINI_API_KEY env var not set');
+
   const body = JSON.stringify({
-    model: 'claude-sonnet-4-20250514',
-    max_tokens: 1000,
-    system: systemPrompt,
-    messages: [{ role: 'user', content: userPrompt }],
+    system_instruction: { parts: [{ text: systemPrompt }] },
+    contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
+    generationConfig: { maxOutputTokens: 1000, temperature: 0.3 },
   });
 
   return new Promise((resolve, reject) => {
+    const path = `/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`;
     const options = {
-      hostname: 'api.anthropic.com',
-      path: '/v1/messages',
+      hostname: 'generativelanguage.googleapis.com',
+      path,
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
-        'anthropic-version': '2023-06-01',
-        'x-api-key': process.env.ANTHROPIC_API_KEY,
         'Content-Length': Buffer.byteLength(body),
       },
     };
@@ -36,7 +37,7 @@ async function callClaude(systemPrompt, userPrompt) {
         try {
           const parsed = JSON.parse(data);
           if (parsed.error) return reject(new Error(parsed.error.message));
-          const text = parsed.content?.map((c) => c.text || '').join('') || '';
+          const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
           resolve(text);
         } catch (e) {
           reject(e);
@@ -122,9 +123,9 @@ async function router(req, res) {
   if (method === 'GET' && url === '/v1/metadata') {
     return send(res, 200, {
       team: 'Claude Vera Agent',
-      model: 'claude-sonnet-4-20250514',
+      model: 'gemini-2.0-flash',
       version: '1.0.0',
-      description: 'AI-powered merchant messaging agent using Claude Sonnet',
+      description: 'AI-powered merchant messaging agent using Gemini 2.0 Flash',
       endpoints: ['/v1/healthz', '/v1/metadata', '/v1/context', '/v1/tick', '/v1/reply'],
     });
   }
