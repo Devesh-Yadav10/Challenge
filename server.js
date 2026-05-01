@@ -45,21 +45,25 @@ function enqueue(fn) {
 
 // ─── Gemini API call ──────────────────────────────────────────────────────────
 async function callGemini(systemPrompt, userPrompt) {
-  const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error('GEMINI_API_KEY env var not set');
+  const apiKey = process.env.GROQ_API_KEY;
+  if (!apiKey) throw new Error('GROQ_API_KEY env var not set');
 
   const body = JSON.stringify({
-    system_instruction: { parts: [{ text: systemPrompt }] },
-    contents: [{ role: 'user', parts: [{ text: userPrompt }] }],
-    generationConfig: { maxOutputTokens: 1000, temperature: 0 },
+    model: 'llama-3.3-70b-versatile',
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: userPrompt }
+    ],
+    max_tokens: 1000,
+    temperature: 0,
   });
 
   return new Promise((resolve, reject) => {
     const options = {
-      hostname: 'generativelanguage.googleapis.com',
-      path: `/v1beta/models/gemini-2.0-flash:generateContent?key=${apiKey}`,
+      hostname: 'api.groq.com',
+      path: '/openai/v1/chat/completions',
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}`, 'Content-Length': Buffer.byteLength(body) },
     };
     const req = https.request(options, (res) => {
       let data = '';
@@ -68,7 +72,7 @@ async function callGemini(systemPrompt, userPrompt) {
         try {
           const parsed = JSON.parse(data);
           if (parsed.error) return reject(new Error(parsed.error.message || JSON.stringify(parsed.error)));
-          resolve(parsed.candidates?.[0]?.content?.parts?.[0]?.text || '');
+          resolve(parsed.choices?.[0]?.message?.content || '');
         } catch (e) { reject(e); }
       });
     });
@@ -157,7 +161,7 @@ async function router(req, res) {
   if (method === 'GET' && url === '/v1/metadata')
     return send(res, 200, {
       team_name: 'Vera Merchant Agent',
-      model: 'gemini-2.0-flash',
+      model: 'llama-3.3-70b-versatile',
       version: '1.0.0',
       description: 'AI-powered merchant messaging agent',
     });
