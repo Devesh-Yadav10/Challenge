@@ -1,14 +1,56 @@
 const http = require('http');
 const https = require('https');
 
-// In-memory state store
 const store = {
   contexts: new Map(),
   replies: new Map(),
+  cache: new Map(),
 };
 
-// ─── Gemini API call ──────────────────────────────────────────────────────────
-async function callClaude(systemPrompt, userPrompt) {
+function hashContext(context) {
+  const str = JSON.stringify({
+    merchant: context.merchant?.id,
+    category: context.category,
+    triggers: context.triggers,
+    performance: context.performance,
+    offers: context.offers?.map(o => o.id + o.status),
+  });
+  let hash = 0;
+  for (let i = 0; i < str.length; i++) {
+    hash = ((hash << 5) - hash) + str.charCodeAt(i);
+    hash |= 0;
+  }
+  return String(hash);
+}
+
+async function withRetry(fn, maxRetries = 4) {
+  for (let attempt = 0; attempt <= maxRetries; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      const isRateLimit = err.message?.toLowerCase().includes('quota') ||
+                          err.message?.toLowerCase().includes('rate') ||
+                          err.message?.toLowerCase().includes('429') ||
+                          err.message?.toLowerCase().includes('too many');
+      if (isRateLimit && attempt < maxRetries) {
+        const delay = Math.pow(2, attempt) * 1000 + Math.random() * 500;
+        console.log(`Rate limited, retrying in ${Math.round(delay)}ms (attempt ${attempt + 1})`);
+        await new Promise(r => setTimeout(r, delay));
+      } else {
+        throw err;
+      }
+    }
+  }
+}
+
+let queue = Promise.resolve();
+function enqueue(fn) {
+  const result = queue.then(() => fn());
+  queue = result.catch(() => {});
+  return result;
+}
+
+async function callGemini(systemPrompt, userPrompt) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error('GEMINI_API_KEY env var not set');
 
@@ -36,12 +78,10 @@ async function callClaude(systemPrompt, userPrompt) {
       res.on('end', () => {
         try {
           const parsed = JSON.parse(data);
-          if (parsed.error) return reject(new Error(parsed.error.message));
+          if (parsed.error) return reject(new Error(parsed.error.message || JSON.stringify(parsed.error)));
           const text = parsed.candidates?.[0]?.content?.parts?.[0]?.text || '';
           resolve(text);
-        } catch (e) {
-          reject(e);
-        }
+        } catch (e) { reject(e); }
       });
     });
 
@@ -51,8 +91,13 @@ async function callClaude(systemPrompt, userPrompt) {
   });
 }
 
-// ─── Core compose logic ───────────────────────────────────────────────────────
 async function compose(context) {
+  const cacheKey = hashContext(context);
+  if (store.cache.has(cacheKey)) {
+    console.log('Cache hit:', cacheKey);
+    return store.cache.get(cacheKey);
+  }
+
   const { merchant, category, performance, offers, triggers } = context;
 
   const systemPrompt = `You are Vera, magicpin's merchant success AI. You craft hyper-personalized, data-driven messages for merchants on the magicpin platform.
@@ -71,31 +116,29 @@ RULES:
 - Match tone to category: restaurants=warm/inviting, pharmacy=clinical/trust, salon=visual/aspirational, grocery=utility/value
 - Pick the SINGLE most impactful trigger to address
 - The message must create urgency without being pushy
-- suppression_key must be deterministic (same inputs → same key) so we don't re-send
-- Return ONLY the JSON object, no markdown, no extra text`;
+- suppression_key must be deterministic (same inputs = same key) so we do not re-send
+- Return ONLY the JSON object, no markdown fences, no extra text`;
 
   const userPrompt = `Merchant context:
 ${JSON.stringify({ merchant, category, performance, offers, triggers }, null, 2)}
 
 Compose the next best message for this merchant.`;
 
-  const raw = await callClaude(systemPrompt, userPrompt);
-  // Strip any accidental markdown fences
+  const raw = await enqueue(() => withRetry(() => callGemini(systemPrompt, userPrompt)));
   const clean = raw.replace(/```json|```/g, '').trim();
-  return JSON.parse(clean);
+  const result = JSON.parse(clean);
+
+  store.cache.set(cacheKey, result);
+  return result;
 }
 
-// ─── HTTP request handler ─────────────────────────────────────────────────────
 function readBody(req) {
   return new Promise((resolve, reject) => {
     let data = '';
     req.on('data', (chunk) => (data += chunk));
     req.on('end', () => {
-      try {
-        resolve(data ? JSON.parse(data) : {});
-      } catch {
-        resolve({});
-      }
+      try { resolve(data ? JSON.parse(data) : {}); }
+      catch { resolve({}); }
     });
     req.on('error', reject);
   });
@@ -114,23 +157,18 @@ function send(res, status, body) {
 async function router(req, res) {
   const { method, url } = req;
 
-  // Health check
-  if (method === 'GET' && url === '/v1/healthz') {
+  if (method === 'GET' && url === '/v1/healthz')
     return send(res, 200, { status: 'ok', version: '1.0.0' });
-  }
 
-  // Metadata
-  if (method === 'GET' && url === '/v1/metadata') {
+  if (method === 'GET' && url === '/v1/metadata')
     return send(res, 200, {
-      team_name: 'Claude Vera Agent',
+      team: 'Vera Merchant Agent',
       model: 'gemini-2.0-flash',
       version: '1.0.0',
       description: 'AI-powered merchant messaging agent using Gemini 2.0 Flash',
       endpoints: ['/v1/healthz', '/v1/metadata', '/v1/context', '/v1/tick', '/v1/reply'],
     });
-  }
 
-  // Push merchant context
   if (method === 'POST' && url === '/v1/context') {
     const body = await readBody(req);
     const id = body?.merchant?.id || body?.merchant_id || `merchant_${Date.now()}`;
@@ -138,19 +176,13 @@ async function router(req, res) {
     return send(res, 200, { status: 'accepted', merchant_id: id });
   }
 
-  // Tick — generate the next message
   if (method === 'POST' && url === '/v1/tick') {
     const body = await readBody(req);
     const id = body?.merchant_id || body?.merchant?.id;
-
     if (!id) return send(res, 400, { error: 'merchant_id required' });
-
     const context = store.contexts.get(id);
-    if (!context) return send(res, 404, { error: 'No context found for merchant. Call /v1/context first.' });
-
-    // Merge any tick-level overrides
+    if (!context) return send(res, 404, { error: 'No context found. Call /v1/context first.' });
     const merged = { ...context, ...body };
-
     try {
       const result = await compose(merged);
       return send(res, 200, result);
@@ -160,7 +192,6 @@ async function router(req, res) {
     }
   }
 
-  // Reply handler
   if (method === 'POST' && url === '/v1/reply') {
     const body = await readBody(req);
     const id = body?.merchant_id;
@@ -168,8 +199,6 @@ async function router(req, res) {
       const history = store.replies.get(id) || [];
       history.push({ ...body, ts: Date.now() });
       store.replies.set(id, history);
-
-      // Update context with reply signal so next tick is aware
       const ctx = store.contexts.get(id) || {};
       ctx.last_reply = body;
       store.contexts.set(id, ctx);
@@ -177,16 +206,18 @@ async function router(req, res) {
     return send(res, 200, { status: 'recorded' });
   }
 
-  // OPTIONS preflight
   if (method === 'OPTIONS') {
-    res.writeHead(204, { 'Access-Control-Allow-Origin': '*', 'Access-Control-Allow-Methods': 'GET,POST,OPTIONS', 'Access-Control-Allow-Headers': 'Content-Type' });
+    res.writeHead(204, {
+      'Access-Control-Allow-Origin': '*',
+      'Access-Control-Allow-Methods': 'GET,POST,OPTIONS',
+      'Access-Control-Allow-Headers': 'Content-Type',
+    });
     return res.end();
   }
 
   return send(res, 404, { error: 'Not found' });
 }
 
-// ─── Start server ─────────────────────────────────────────────────────────────
 const PORT = process.env.PORT || 3000;
 const server = http.createServer((req, res) => {
   router(req, res).catch((err) => {
